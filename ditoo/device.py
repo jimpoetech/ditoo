@@ -1,4 +1,30 @@
-"""High-level Divoom Ditoo / Ditoo Pro device interface."""
+"""High-level Divoom Ditoo / Ditoo Pro device interface.
+
+Confirmed working on Ditoo Pro (tested 2026-04-06):
+  - Brightness, screen on/off
+  - Clock channel (styles 0-5, color)
+  - Light channel (solid color; modes like love/plants untested-effective)
+  - Custom image push (static 16x16)
+  - Scrolling text (via animation frames)
+  - Weather + temperature on clock overlay
+  - Temperature unit (F/C)
+  - Countdown timer (with completion beep)
+  - Noise meter
+  - Scoreboard (via tool command 0x72, not channel 0x06)
+  - Sleep timer
+  - Keyboard LED toggle/cycle effects
+  - Set datetime (BCD year encoding)
+  - Volume control
+
+Not working on Ditoo Pro (may need Divoom app or not supported):
+  - VJ effects channel (0x03) — no response
+  - Visualizer channel (0x04) — no response
+  - FM radio (0x05/0x61) — no response
+  - Stopwatch/timer tool (0x72 0x00) — no response
+  - Cloud channel (0x02) — no response
+  - Scoreboard via channel 0x06 — shows lyrics screen instead
+  - Light modes (love, plants, etc.) — only solid color works
+"""
 
 import time
 from PIL import Image
@@ -158,7 +184,11 @@ class DitooDevice:
         self._send(0x45, [CHANNEL_CUSTOM])
 
     def set_scoreboard(self, red=0, blue=0):
-        """Show scoreboard with red and blue team scores (0-999)."""
+        """Show scoreboard with red and blue team scores (0-999).
+
+        Note: On Ditoo Pro, use set_scoreboard_tool() instead — channel
+        0x06 shows the lyrics screen rather than a scoreboard.
+        """
         self._send(0x45, [
             0x06, 0x00,
             red & 0xFF, (red >> 8) & 0xFF,
@@ -253,14 +283,17 @@ class DitooDevice:
 
     # -- Weather --
 
-    def set_weather(self, temperature, weather_type=WEATHER_CLEAR):
-        """Set weather display.
+    def set_weather(self, temperature_c, weather_type=WEATHER_CLEAR):
+        """Set weather data shown on the clock overlay.
+
+        Temperature is always in Celsius — the device converts to
+        Fahrenheit for display if set_temp_unit(fahrenheit=True).
 
         Args:
-            temperature: degrees (negative values use two's complement)
+            temperature_c: degrees Celsius (negative values supported)
             weather_type: one of the WEATHER_* constants
         """
-        temp_byte = temperature if temperature >= 0 else (256 + temperature)
+        temp_byte = temperature_c if temperature_c >= 0 else (256 + temperature_c)
         self._send(0x5F, [temp_byte & 0xFF, weather_type])
 
     def set_temp_unit(self, fahrenheit=False):
