@@ -127,8 +127,8 @@ def main():
     parser = argparse.ArgumentParser(description="Stock Watchlist for Divoom Ditoo")
     parser.add_argument("--mac", required=True, help="Bluetooth MAC address")
     parser.add_argument(
-        "--symbols", default="GME,AMC,AAPL,TSLA,MSFT",
-        help="Comma-separated stock symbols (default: GME,AMC,AAPL,TSLA,MSFT)"
+        "--symbols", default="GME,GMEW=GME-WT,BYND,BTC=BTC-USD",
+        help="Comma-separated stock symbols (default: GME,GMEW=GME-WT,BYND,BTC=BTC-USD)"
     )
     parser.add_argument(
         "--rotate", type=int, default=15,
