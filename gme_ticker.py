@@ -11,15 +11,13 @@ Requires: Linux with BlueZ, Python 3.7+, Pillow, requests
 """
 
 import argparse
-import json
 import socket
-import struct
 import time
 import urllib.parse
 from math import ceil, log2
-from io import BytesIO
 
-from PIL import Image, ImageDraw
+import requests
+from PIL import Image
 
 # ---------------------------------------------------------------------------
 # Tiny 3x5 bitmap font for digits, letters, and symbols
@@ -97,8 +95,6 @@ def text_width(text):
 
 def fetch_stock_price(symbol="GME"):
     """Fetch current stock price and change from Yahoo Finance."""
-    import requests
-
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(symbol)}"
     params = {"interval": "1d", "range": "2d"}
     headers = {"User-Agent": "Mozilla/5.0"}
@@ -191,7 +187,7 @@ def render_ticker(stock_data):
 class DitooConnection:
     """Bluetooth RFCOMM connection to a Divoom Ditoo."""
 
-    RFCOMM_PORT = 1
+    RFCOMM_PORT = 2
 
     def __init__(self, mac_address):
         self.mac = mac_address
@@ -203,7 +199,9 @@ class DitooConnection:
         self.sock = socket.socket(
             socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM
         )
+        self.sock.settimeout(10)
         self.sock.connect((self.mac, self.RFCOMM_PORT))
+        self.sock.settimeout(None)
         time.sleep(1)  # Wait for device to be ready
         print("Connected!")
 
@@ -248,9 +246,14 @@ class DitooConnection:
         brightness = max(0, min(100, brightness))
         self.send_command(0x74, [brightness])
 
+    def set_channel(self, channel=0):
+        """Switch display channel (0=custom/faces, 1=cloud, 2=visualizer, 3=custom page)."""
+        self.send_command(0x45, [channel])
+
     def send_image(self, img):
         """Send a 16x16 RGB PIL Image to the Ditoo display."""
-        assert img.size == (16, 16), "Image must be 16x16"
+        if img.size != (16, 16):
+            raise ValueError(f"Image must be 16x16, got {img.size}")
         img = img.convert("RGB")
 
         # Build palette and pixel indices
@@ -338,12 +341,28 @@ def main():
     args = parser.parse_args()
 
     ditoo = DitooConnection(args.mac)
-    ditoo.connect()
+
+    def ensure_connected():
+        """Connect and initialize the display, with retries."""
+        max_retries = 5
+        for attempt in range(1, max_retries + 1):
+            try:
+                ditoo.connect()
+                ditoo.set_brightness(args.brightness)
+                time.sleep(0.3)
+                ditoo.set_channel(5)  # Switch to custom image push mode
+                time.sleep(0.3)
+                return
+            except (OSError, ConnectionError) as e:
+                print(f"  Connection attempt {attempt}/{max_retries} failed: {e}")
+                ditoo.disconnect()
+                if attempt < max_retries:
+                    time.sleep(3)
+        raise ConnectionError(f"Failed to connect after {max_retries} attempts")
+
+    ensure_connected()
 
     try:
-        ditoo.set_brightness(args.brightness)
-        time.sleep(0.3)
-
         while True:
             print(f"Fetching {args.symbol} price...")
             stock = fetch_stock_price(args.symbol)
@@ -357,7 +376,16 @@ def main():
                 print("  Failed to fetch price.")
 
             img = render_ticker(stock)
-            ditoo.send_image(img)
+
+            try:
+                ditoo.send_image(img)
+            except (OSError, ConnectionError) as e:
+                print(f"  Bluetooth connection lost: {e}")
+                ditoo.disconnect()
+                print("  Reconnecting...")
+                ensure_connected()
+                ditoo.send_image(img)
+
             print("  Display updated.")
 
             if args.once:
