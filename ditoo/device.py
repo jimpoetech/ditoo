@@ -243,7 +243,7 @@ class DitooDevice:
             import datetime
             dt = datetime.datetime.now()
         self._send(0x18, [
-            dt.year & 0xFF, (dt.year >> 8) & 0xFF,
+            dt.year % 100, dt.year // 100,
             dt.month, dt.day, dt.hour, dt.minute, dt.second, 0x00
         ])
 
