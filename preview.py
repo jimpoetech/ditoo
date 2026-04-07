@@ -12,7 +12,6 @@ else:
     stock = {"symbol": "GME", "price": 27.43, "change": 1.22, "change_pct": 4.65}
 
 img = render_ticker(stock)
-# Scale up 16x to 256x256 for visibility
-preview = img.resize((256, 256), resample=0)  # nearest neighbor
+preview = img.resize((256, 256), resample=0)
 preview.save("preview.png")
 print("Saved preview.png (256x256 upscaled version of 16x16 display)")
